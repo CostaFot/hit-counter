@@ -34,6 +34,12 @@ whose count is read from the umami analytics database.
 - Public URL: https://hit-counter-production.up.railway.app/counter.svg
 - Same project also hosts the `umami` and `Postgres` services; the counter reaches Postgres via private networking.
 
+## Backups
+
+- `backup.js` runs as a separate Railway cron service (**count-backup**, weekly) in the same project. It reads the count from Postgres and appends `date,pageviews` to `counts.csv` on the data-only `backups` branch via the GitHub Contents API.
+- The `backups` branch is an orphan branch (no code). Railway only watches `main`, so backup commits never trigger deploys.
+- Extra env vars for the cron service: `GITHUB_TOKEN` (fine-grained PAT, Contents read/write on this repo), `GITHUB_REPO`, `BACKUP_BRANCH`, `BACKUP_FILE` (all defaulted).
+
 ## Local development
 
 ```sh
