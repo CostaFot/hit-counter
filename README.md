@@ -23,6 +23,12 @@ Without a database: `MOCK_COUNT=4269 node server.js`.
 Environment variables: `DATABASE_URL`, `WEBSITE_ID`, `CACHE_SECONDS` (60),
 `MIN_DIGITS` (6), `COUNT_OFFSET` (0), `PORT` (3000). See AGENTS.md for details.
 
+## Styles
+
+Top to bottom: `odometer`, `led`, `lcd`, `strip`, `nixie`, `flip`.
+
+![Style preview](styles-preview.png)
+
 ## Endpoints
 
 - `/counter.svg` — the counter image; `?style=` one of `odometer`, `led`, `lcd`, `strip`, `nixie`, `flip`
