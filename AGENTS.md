@@ -8,7 +8,7 @@ whose count is read from the umami analytics database.
 - Single-file Node HTTP server (`server.js`), ESM, no framework. Only dependency: `pg`.
 - Reads pageview count directly from umami's Postgres: `SELECT count(*) FROM website_event WHERE event_type = 1 AND website_id = $1`. There is no umami API involvement — schema coupling to umami v2 is deliberate (avoids auth tokens).
 - Count is cached in memory for `CACHE_SECONDS`; on DB error the last known value is served (stale-on-error).
-- SVG is rendered inline in `odometerSvg()` — metallic bezel, per-digit drum cells with gradient shading. No external fonts (SVG in `<img>` cannot load them); uses `Courier New`/monospace.
+- SVG renderers live in `styles.js` (`STYLES` map: odometer, led, lcd, strip, nixie, flip). Style is chosen per-request via `?style=` or globally via the `COUNTER_STYLE` env var (default `odometer`). `GET /styles` serves an HTML gallery of all of them with the live count. No external fonts (SVG in `<img>` cannot load them); text styles use `Courier New`/monospace.
 
 ## Endpoints
 

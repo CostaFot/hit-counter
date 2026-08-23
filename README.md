@@ -25,5 +25,8 @@ Environment variables: `DATABASE_URL`, `WEBSITE_ID`, `CACHE_SECONDS` (60),
 
 ## Endpoints
 
-- `/counter.svg` — the counter image
+- `/counter.svg` — the counter image; `?style=` one of `odometer`, `led`, `lcd`, `strip`, `nixie`, `flip`
+- `/styles` — HTML gallery of all styles
 - `/healthz` — health check
+
+Default style: `COUNTER_STYLE` env var, else `odometer`.
