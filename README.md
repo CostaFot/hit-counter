@@ -32,6 +32,7 @@ Top to bottom: `odometer`, `led`, `lcd`, `strip`, `nixie`, `flip`.
 ## Endpoints
 
 - `/counter.svg` — the counter image; `?style=` one of `odometer`, `led`, `lcd`, `strip`, `nixie`, `flip`
+- `/counter.svg?key=<slug>` — a separate counter that counts its own fetches instead of reading umami. For embeds on pages umami cannot see, like a GitHub README. Keys: `a-z`, `0-9`, `-`.
 - `/styles` — HTML gallery of all styles
 - `/healthz` — health check
 

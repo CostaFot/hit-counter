@@ -8,12 +8,32 @@ const MIN_DIGITS = Number(process.env.MIN_DIGITS || 6);
 const COUNT_OFFSET = Number(process.env.COUNT_OFFSET || 0);
 const WEBSITE_ID = process.env.WEBSITE_ID || null;
 const MOCK_COUNT = process.env.MOCK_COUNT ? Number(process.env.MOCK_COUNT) : null;
+const KEY_RE = /^[a-z0-9-]{1,40}$/;
 
 const pool = MOCK_COUNT === null
   ? new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 2 })
   : null;
 
 let cached = { count: null, at: 0 };
+const mockHits = new Map();
+
+// Self-counted embeds: /counter.svg?key=<slug> bumps and renders its own tally,
+// one per fetch, instead of the umami pageview total. For places umami cannot
+// see, such as the GitHub profile README. Never cached: every fetch is a hit.
+async function bumpHits(key) {
+  if (MOCK_COUNT !== null) {
+    const n = (mockHits.get(key) || 0) + 1;
+    mockHits.set(key, n);
+    return n;
+  }
+  const { rows } = await pool.query(
+    `INSERT INTO counter_hits (key, n, updated_at) VALUES ($1, 1, now())
+     ON CONFLICT (key) DO UPDATE SET n = counter_hits.n + 1, updated_at = now()
+     RETURNING n`,
+    [key]
+  );
+  return Number(rows[0].n);
+}
 
 async function fetchCount() {
   if (MOCK_COUNT !== null) return MOCK_COUNT;
@@ -55,8 +75,13 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(400, { "content-type": "text/plain" });
       return res.end(`unknown style; valid: ${Object.keys(STYLES).join(", ")}`);
     }
+    const key = url.searchParams.get("key");
+    if (key !== null && !KEY_RE.test(key)) {
+      res.writeHead(400, { "content-type": "text/plain" });
+      return res.end("bad key; use 1-40 of a-z, 0-9, -");
+    }
     try {
-      const count = await getCount();
+      const count = key ? await bumpHits(key) : await getCount();
       const digits = String(count).padStart(MIN_DIGITS, "0").split("");
       res.writeHead(200, {
         "content-type": "image/svg+xml",
@@ -91,6 +116,13 @@ server.listen(PORT, "0.0.0.0", async () => {
   console.log(`hit-counter listening on :${PORT}`);
   if (pool) {
     try {
+      await pool.query(
+        `CREATE TABLE IF NOT EXISTS counter_hits (
+           key text PRIMARY KEY,
+           n bigint NOT NULL DEFAULT 0,
+           updated_at timestamptz NOT NULL DEFAULT now()
+         )`
+      );
       const { rows } = await pool.query(
         "SELECT website_id, name, domain FROM website"
       );
