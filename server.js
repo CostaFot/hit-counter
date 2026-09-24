@@ -17,6 +17,56 @@ const pool = MOCK_COUNT === null
 let cached = { count: null, at: 0 };
 const mockHits = new Map();
 
+// Per-path pageviews, for the "N views" line on a post at costafotiadis.com.
+// One GROUP BY over the same umami table, cached like the total; a single
+// path is looked up in that map rather than queried on its own. Paths are
+// keyed the way the site's URLs are written: no query, no trailing slash,
+// the root is "/", so a Ghost-era "/slug/" and a hit on "/slug" add up.
+// MOCK_VIEWS="/a=12,/b=3" stands in for the table when MOCK_COUNT is set.
+const VIEWS_LIMIT = 1000;
+let viewsCached = { views: null, at: 0 };
+const mockViews = new Map();
+for (const kv of (process.env.MOCK_VIEWS || "").split(",").filter(Boolean)) {
+  const at = kv.lastIndexOf("=");
+  const key = normalisePath(at < 0 ? kv : kv.slice(0, at));
+  mockViews.set(key, (mockViews.get(key) || 0) + (at < 0 ? 0 : Number(kv.slice(at + 1)) || 0));
+}
+
+function normalisePath(path) {
+  const p = String(path || "").split(/[?#]/)[0].replace(/\/{2,}/g, "/").replace(/\/+$/, "");
+  return p === "" ? "/" : p;
+}
+
+async function fetchViews() {
+  if (MOCK_COUNT !== null) return mockViews;
+  const sql = WEBSITE_ID
+    ? "SELECT url_path AS path, count(*)::bigint AS n FROM website_event WHERE event_type = 1 AND website_id = $1 GROUP BY url_path"
+    : "SELECT url_path AS path, count(*)::bigint AS n FROM website_event WHERE event_type = 1 GROUP BY url_path";
+  const { rows } = await pool.query(sql, WEBSITE_ID ? [WEBSITE_ID] : []);
+  const views = new Map();
+  for (const { path, n } of rows) {
+    const key = normalisePath(path);
+    views.set(key, (views.get(key) || 0) + Number(n));
+  }
+  return views;
+}
+
+async function getViews() {
+  const now = Date.now();
+  if (viewsCached.views !== null && now - viewsCached.at < CACHE_SECONDS * 1000) {
+    return viewsCached.views;
+  }
+  try {
+    const views = await fetchViews();
+    viewsCached = { views, at: now };
+    return views;
+  } catch (err) {
+    console.error("views query failed:", err.message);
+    if (viewsCached.views !== null) return viewsCached.views; // serve stale on error
+    throw err;
+  }
+}
+
 // Self-counted embeds: /counter.svg?key=<slug> bumps and renders its own tally,
 // one per fetch, instead of the umami pageview total. For places umami cannot
 // see, such as the GitHub profile README. Never cached: every fetch is a hit.
@@ -92,6 +142,34 @@ const server = http.createServer(async (req, res) => {
     } catch {
       res.writeHead(503, { "content-type": "text/plain" });
       return res.end("counter unavailable");
+    }
+  }
+  // GET /views            -> [{ path, views }] most viewed first (?limit=, default 200, max 1000)
+  // GET /views?path=/x/   -> { path, views }, 0 for a path umami never saw
+  if (url.pathname === "/views") {
+    const headers = {
+      "content-type": "application/json",
+      "cache-control": `public, max-age=${CACHE_SECONDS}`,
+      "access-control-allow-origin": "*",
+    };
+    try {
+      const views = await getViews();
+      const path = url.searchParams.get("path");
+      if (path !== null) {
+        const key = normalisePath(path);
+        res.writeHead(200, headers);
+        return res.end(JSON.stringify({ path: key, views: views.get(key) || 0 }));
+      }
+      const limit = Math.min(VIEWS_LIMIT, Math.max(1, Number(url.searchParams.get("limit")) || 200));
+      const rows = [...views]
+        .map(([path, n]) => ({ path, views: n }))
+        .sort((a, b) => b.views - a.views || a.path.localeCompare(b.path))
+        .slice(0, limit);
+      res.writeHead(200, headers);
+      return res.end(JSON.stringify(rows));
+    } catch {
+      res.writeHead(503, { "content-type": "text/plain", "access-control-allow-origin": "*" });
+      return res.end("views unavailable");
     }
   }
   if (url.pathname === "/styles") {

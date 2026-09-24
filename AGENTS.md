@@ -17,6 +17,7 @@ no `?style=` param.
 
 - `GET /` or `/counter.svg` — the counter image (`Cache-Control: no-cache`, CORS `*`); optional `?style=` overrides the configured style, unknown names 400 with the valid list
 - `?key=<slug>` on the same path switches to a self-counted tally: every fetch does `INSERT ... ON CONFLICT DO UPDATE` on `counter_hits (key, n, updated_at)` in the same Postgres and renders the new `n`. No cache, no `COUNT_OFFSET`. The table is created at startup (`CREATE TABLE IF NOT EXISTS`); it is ours, not umami's. Keys are 1–40 of `a-z0-9-`, anything else 400s. Used for places umami cannot see: the GitHub profile README embeds `?key=github-profile`. GitHub fetches README images through its camo proxy, which honours `no-cache`, so a hit is roughly one profile render; browser caching still loses some.
+- `GET /views` — JSON `[{ path, views }]`, every path's pageviews from the same umami table (`GROUP BY url_path`, `event_type = 1`, the `WEBSITE_ID` filter), most viewed first, `?limit=` default 200 and at most 1000; `GET /views?path=/x/` is one path as `{ path, views }`, `0` when unknown. Paths are normalised before use as keys (query and hash dropped, doubled and trailing slashes stripped, the root is `/`), so `/slug/` and `/slug` add up. The whole table is one query cached for `CACHE_SECONDS` and served stale on error like the total; a single path is a lookup in that map. `Cache-Control: public, max-age=<CACHE_SECONDS>`, CORS `*`, 503 `views unavailable` when the DB never answered. costafotiadis.com reads it at build time for the `N views` on every post and again in the browser to refresh it (added 2026-09-25).
 - `GET /styles` — HTML gallery of all styles rendering the live count
 - `GET /healthz` — plain "ok"
 
@@ -31,6 +32,7 @@ no `?style=` param.
 | `MIN_DIGITS` | 6 | zero-padding width |
 | `COUNT_OFFSET` | 0 | added to the real count |
 | `MOCK_COUNT` | unset | local dev: skip DB, render this number |
+| `MOCK_VIEWS` | unset | local dev with `MOCK_COUNT`: `/views` table as `/a/=12,/b=3` (paths normalised, repeats add up) |
 | `PORT` | 3000 | Railway injects 8080 |
 
 ## Deployment
